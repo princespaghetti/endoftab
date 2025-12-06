@@ -16,7 +16,7 @@ A Chromium browser extension that automatically closes inactive tabs after a con
 2. Open Chrome/Edge and navigate to `chrome://extensions/`
 3. Enable **Developer mode** (toggle in top-right corner)
 4. Click **Load unpacked**
-5. Select the directory containing this extension
+5. Select the `src/` directory from this repository
 6. The extension icon will appear in your toolbar
 
 ## Usage

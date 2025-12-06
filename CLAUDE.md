@@ -6,9 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 End of Tab is a Chromium browser extension (Manifest V3) that automatically closes inactive tabs after a configurable timeout period. The extension protects pinned, active, and audible tabs from auto-closure.
 
+Extension files are located in the `src/` directory.
+
 ## Architecture
 
-The extension consists of three main components:
+The extension consists of three main components (all in `src/`):
 
 ### background.js (Service Worker)
 The core logic runs as a persistent service worker that:
@@ -41,7 +43,7 @@ Declares required permissions:
 ### Loading the Extension
 1. Navigate to `chrome://extensions/`
 2. Enable "Developer mode"
-3. Click "Load unpacked" and select this directory
+3. Click "Load unpacked" and select the `src/` directory
 4. The extension will appear in the toolbar
 
 ### Testing Changes
