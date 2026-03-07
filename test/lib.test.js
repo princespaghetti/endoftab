@@ -3,9 +3,19 @@ import {
   canCloseTabInWindow,
   DEFAULT_TIMEOUT_MINUTES,
   getHostname,
+  isClosableUrl,
   isWhitelisted,
   shouldCloseTab,
 } from "../src/lib.js";
+import {
+  normalizeEnabled,
+  normalizeSettings,
+  normalizeTimeoutMinutes,
+  normalizeWhitelist,
+  sanitizeSettingsPatch,
+  readSettings,
+  writeSettings,
+} from "../src/settings.js";
 
 describe("DEFAULT_TIMEOUT_MINUTES", () => {
   it("should be 30", () => {
@@ -71,6 +81,19 @@ describe("isWhitelisted", () => {
   it("should check multiple whitelist entries", () => {
     const whitelist = ["example.com", "other.com"];
     expect(isWhitelisted("sub.other.com", whitelist)).toBe(true);
+  });
+});
+
+describe("isClosableUrl", () => {
+  it("should allow http and https URLs", () => {
+    expect(isClosableUrl("https://example.com")).toBe(true);
+    expect(isClosableUrl("http://example.com")).toBe(true);
+  });
+
+  it("should reject browser-owned and invalid URLs", () => {
+    expect(isClosableUrl("chrome://settings")).toBe(false);
+    expect(isClosableUrl("chrome-extension://abc123/popup.html")).toBe(false);
+    expect(isClosableUrl("not-a-url")).toBe(false);
   });
 });
 
@@ -150,6 +173,17 @@ describe("shouldCloseTab", () => {
     };
     expect(shouldCloseTab(tab, now, threshold, [])).toBe(true);
   });
+
+  it("should return false for non-web tabs even when stale", () => {
+    const tab = {
+      pinned: false,
+      active: false,
+      audible: false,
+      url: "chrome://settings",
+      lastAccessed: now - 60 * 60 * 1000,
+    };
+    expect(shouldCloseTab(tab, now, threshold, [])).toBe(false);
+  });
 });
 
 describe("canCloseTabInWindow", () => {
@@ -186,5 +220,107 @@ describe("canCloseTabInWindow", () => {
       { id: 4, pinned: true },
     ];
     expect(canCloseTabInWindow(tab, windowTabs)).toBe(true);
+  });
+});
+
+describe("settings normalization", () => {
+  it("should default enabled to true unless a boolean false is stored", () => {
+    expect(normalizeEnabled(undefined)).toBe(true);
+    expect(normalizeEnabled("false")).toBe(true);
+    expect(normalizeEnabled(false)).toBe(false);
+  });
+
+  it("should normalize timeout minutes safely", () => {
+    expect(normalizeTimeoutMinutes("45")).toBe(45);
+    expect(normalizeTimeoutMinutes(12.8)).toBe(12);
+    expect(normalizeTimeoutMinutes(-1)).toBe(DEFAULT_TIMEOUT_MINUTES);
+    expect(normalizeTimeoutMinutes("abc")).toBe(DEFAULT_TIMEOUT_MINUTES);
+  });
+
+  it("should normalize whitelist entries to unique lowercase hostnames", () => {
+    expect(
+      normalizeWhitelist([
+        " Example.com ",
+        "https://Sub.Example.com/path",
+        "example.com",
+        "",
+        42,
+        "<img src=x onerror=alert(1)>",
+      ]),
+    ).toEqual(["example.com", "sub.example.com"]);
+  });
+
+  it("should normalize malformed settings objects", () => {
+    expect(
+      normalizeSettings({
+        enabled: "yes",
+        timeoutMinutes: 0,
+        whitelist: ["Example.com", null, "https://docs.example.com/path"],
+      }),
+    ).toEqual({
+      enabled: true,
+      timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
+      whitelist: ["example.com", "docs.example.com"],
+    });
+  });
+
+  it("should sanitize partial settings writes", () => {
+    expect(
+      sanitizeSettingsPatch({
+        timeoutMinutes: "-5",
+        whitelist: ["Example.com", "example.com"],
+      }),
+    ).toEqual({
+      timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
+      whitelist: ["example.com"],
+    });
+  });
+});
+
+describe("settings storage helpers", () => {
+  it("should read normalized settings from storage", async () => {
+    const storageArea = {
+      get: async () => ({
+        enabled: "oops",
+        timeoutMinutes: -99,
+        whitelist: ["Example.com", "https://sub.example.com/path", 5],
+      }),
+    };
+
+    await expect(readSettings(storageArea)).resolves.toEqual({
+      enabled: true,
+      timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
+      whitelist: ["example.com", "sub.example.com"],
+    });
+  });
+
+  it("should write only normalized settings back to storage", async () => {
+    let savedValue = null;
+    const storageArea = {
+      set: async (value) => {
+        savedValue = value;
+      },
+    };
+
+    await expect(
+      writeSettings(
+        {
+          enabled: "invalid",
+          timeoutMinutes: "15",
+          whitelist: ["Example.com", "https://docs.example.com/path"],
+        },
+        storageArea,
+      ),
+    ).resolves.toEqual({
+      enabled: true,
+      timeoutMinutes: 15,
+      whitelist: ["example.com", "docs.example.com"],
+    });
+
+    expect(savedValue).toEqual({
+      enabled: true,
+      timeoutMinutes: 15,
+      whitelist: ["example.com", "docs.example.com"],
+    });
   });
 });

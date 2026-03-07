@@ -8,6 +8,15 @@ export function getHostname(url) {
   }
 }
 
+export function isClosableUrl(url) {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function isWhitelisted(hostname, whitelist) {
   for (const entry of whitelist) {
     const domain = entry.toLowerCase();
@@ -27,7 +36,10 @@ export function shouldCloseTab(
 ) {
   if (tab.pinned || tab.active || tab.audible) return false;
 
-  const hostname = getHostnameFn(tab.url || "");
+  const url = tab.url || "";
+  if (!isClosableUrl(url)) return false;
+
+  const hostname = getHostnameFn(url);
   if (hostname && isWhitelisted(hostname, whitelist)) return false;
 
   if (!tab.lastAccessed) return false;

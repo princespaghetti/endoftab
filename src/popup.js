@@ -1,3 +1,6 @@
+import { getHostname } from "./lib.js";
+import { readSettings, writeSettings } from "./settings.js";
+
 const enabledEl = document.getElementById("enabled");
 const timeoutEl = document.getElementById("timeout");
 const addCurrentSiteBtn = document.getElementById("addCurrentSite");
@@ -5,68 +8,78 @@ const whitelistItemsEl = document.getElementById("whitelistItems");
 
 let whitelist = [];
 
-function getHostname(url) {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return null;
-  }
-}
-
 function renderWhitelist() {
-  whitelistItemsEl.innerHTML = "";
+  whitelistItemsEl.replaceChildren();
+
   if (whitelist.length === 0) {
-    whitelistItemsEl.innerHTML = '<li class="empty">No sites whitelisted</li>';
+    const emptyState = document.createElement("li");
+    emptyState.className = "empty";
+    emptyState.textContent = "No sites whitelisted";
+    whitelistItemsEl.appendChild(emptyState);
     return;
   }
+
   whitelist.forEach((domain) => {
     const li = document.createElement("li");
-    li.innerHTML = `<span>${domain}</span><button data-domain="${domain}">×</button>`;
+    const label = document.createElement("span");
+    label.textContent = domain;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.domain = domain;
+    button.textContent = "×";
+
+    li.append(label, button);
     whitelistItemsEl.appendChild(li);
   });
 }
 
 async function loadSettings() {
-  const data = await chrome.storage.local.get([
-    "enabled",
-    "timeoutMinutes",
-    "whitelist",
-  ]);
-  enabledEl.checked = data.enabled !== false;
-  timeoutEl.value = data.timeoutMinutes || 30;
-  whitelist = data.whitelist || [];
-  renderWhitelist();
+  try {
+    const data = await readSettings();
+    enabledEl.checked = data.enabled;
+    timeoutEl.value = String(data.timeoutMinutes);
+    whitelist = data.whitelist;
+    renderWhitelist();
+  } catch (e) {
+    console.error("[End of Tab] Failed to load settings", e);
+  }
 }
 
 async function saveWhitelist() {
-  await chrome.storage.local.set({ whitelist });
+  const savedSettings = await writeSettings({ whitelist });
+  whitelist = savedSettings.whitelist || [];
   renderWhitelist();
 }
 
 loadSettings();
 
-enabledEl.addEventListener("change", () => {
-  chrome.storage.local.set({ enabled: enabledEl.checked });
+enabledEl.addEventListener("change", async () => {
+  const savedSettings = await writeSettings({ enabled: enabledEl.checked });
+  enabledEl.checked = savedSettings.enabled ?? true;
 });
 
-timeoutEl.addEventListener("change", () => {
-  chrome.storage.local.set({
-    timeoutMinutes: parseInt(timeoutEl.value, 10) || 30,
+timeoutEl.addEventListener("change", async () => {
+  const savedSettings = await writeSettings({
+    timeoutMinutes: timeoutEl.value,
   });
+  timeoutEl.value = String(savedSettings.timeoutMinutes || 30);
 });
 
 addCurrentSiteBtn.addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const hostname = getHostname(tab?.url || "");
   if (hostname && !whitelist.includes(hostname)) {
-    whitelist.push(hostname);
-    saveWhitelist();
+    whitelist = [...whitelist, hostname];
+    await saveWhitelist();
   }
 });
 
-whitelistItemsEl.addEventListener("click", (e) => {
-  if (e.target.tagName === "BUTTON" && e.target.dataset.domain) {
-    whitelist = whitelist.filter((d) => d !== e.target.dataset.domain);
-    saveWhitelist();
+whitelistItemsEl.addEventListener("click", async (e) => {
+  if (!(e.target instanceof HTMLButtonElement) || !e.target.dataset.domain) {
+    return;
   }
+
+  whitelist = whitelist.filter((domain) => domain !== e.target.dataset.domain);
+  await saveWhitelist();
 });
