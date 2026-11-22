@@ -3,6 +3,7 @@
   "name": "End of Tab",
   "version": "1.0",
   "description": "Closes tabs inactive for longer than a set time",
+  "minimum_chrome_version": "121",
   "permissions": ["tabs", "storage", "alarms"],
   "background": {
     "service_worker": "background.js",

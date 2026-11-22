@@ -21,7 +21,7 @@ jobs:
         run: bun install
 
       - name: Lint and format
-        run: bun check
+        run: bunx biome ci ./src ./test
 
       - name: Run tests
         run: bun test

@@ -59,6 +59,15 @@ enabledEl.addEventListener("change", async () => {
   enabledEl.checked = savedSettings.enabled ?? true;
 });
 
+// Save on every keystroke: the popup can close before "change" fires.
+// Don't rewrite the field here, or partial input like "" would jump to 30.
+timeoutEl.addEventListener("input", async () => {
+  const minutes = Number.parseInt(timeoutEl.value, 10);
+  if (minutes >= 1) {
+    await writeSettings({ timeoutMinutes: minutes });
+  }
+});
+
 timeoutEl.addEventListener("change", async () => {
   const savedSettings = await writeSettings({
     timeoutMinutes: timeoutEl.value,

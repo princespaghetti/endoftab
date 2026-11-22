@@ -1,7 +1,4 @@
-import {
-  canCloseTabInWindow,
-  shouldCloseTab,
-} from "./lib.js";
+import { canCloseTabInWindow, getActiveSince, shouldCloseTab } from "./lib.js";
 import { readSettings } from "./settings.js";
 
 function ensureAlarm() {
@@ -23,6 +20,19 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
     const now = Date.now();
     const threshold = timeoutMinutes * 60 * 1000;
+
+    // storage.session is cleared when the browser restarts.
+    const session = await chrome.storage.session.get([
+      "activeSince",
+      "lastCheck",
+    ]);
+    const activeSince = getActiveSince(
+      session.activeSince,
+      session.lastCheck,
+      now,
+    );
+    await chrome.storage.session.set({ activeSince, lastCheck: now });
+
     const tabs = await chrome.tabs.query({});
     const windowTabsById = new Map();
 
@@ -33,7 +43,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     for (const tab of tabs) {
-      if (!shouldCloseTab(tab, now, threshold, whitelist)) continue;
+      if (!shouldCloseTab(tab, now, threshold, whitelist, activeSince))
+        continue;
 
       const windowTabs = windowTabsById.get(tab.windowId) || [];
       if (!canCloseTabInWindow(tab, windowTabs)) continue;

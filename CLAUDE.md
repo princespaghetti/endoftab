@@ -10,33 +10,30 @@ Extension files are located in the `src/` directory.
 
 ## Architecture
 
-The extension consists of three main components (all in `src/`):
+All extension code is in `src/`. Pure logic lives in `lib.js` and `settings.js` so it can be unit-tested with Bun (`test/lib.test.js`) without a browser.
 
 ### background.js (Service Worker)
-The core logic runs as a persistent service worker that:
-- Tracks tab activity using a Map (`tabActivity`) that stores tabId -> timestamp
-- Persists activity state to `chrome.storage.local` for recovery after restarts
-- Uses `chrome.alarms` API to check for inactive tabs every minute
-- Protects pinned, active, and audible tabs by updating their activity timestamp
-- Closes tabs when: `(now - lastActive) > threshold`
+- An alarm named `checkInactiveTabs` fires every minute.
+- Each check reads settings, queries all tabs, and closes those where `shouldCloseTab` returns true.
+- Inactivity comes from Chrome's built-in `tab.lastAccessed` (Chrome 121+, enforced via `minimum_chrome_version`). The extension does not track activity itself.
+- Inactivity is counted from `max(tab.lastAccessed, activeSince)`. `activeSince` is stored in `chrome.storage.session` and resets to "now" when the browser restarts, the extension reloads, or the gap since the last check exceeds 5 minutes (sleep). This prevents mass-closing restored tabs after a restart or wake.
+- A tab is not closed in a window unless more than one unpinned tab remains (`canCloseTabInWindow`).
 
-Key implementation details:
-- Activity tracking initializes on `chrome.runtime.onStartup` and `onInstalled`
-- Existing tabs are initialized with current time if active, or `now - 60000` if inactive
-- Tab activity Map is persisted to storage on each alarm check
-- Alarm named 'checkInactiveTabs' runs periodically every 1 minute
+### lib.js
+Pure helpers: URL/hostname parsing, whitelist matching (includes subdomains), `getActiveSince`, `shouldCloseTab`, `canCloseTabInWindow`.
+
+Protected from closing: pinned, active, and audible tabs; non-`http(s)` URLs (e.g. `chrome://`); whitelisted domains.
+
+### settings.js
+Reads and writes settings in `chrome.storage.local`, normalizing every value (invalid input falls back to defaults). Both background and popup go through `readSettings` / `writeSettings`.
 
 ### popup.html + popup.js
-Provides user interface for configuration:
-- Enabled/disabled toggle (stored as `enabled` in chrome.storage.local)
-- Timeout duration in minutes (stored as `timeoutMinutes`, defaults to 30)
-- Settings are saved immediately on change and loaded on popup open
+- Enabled toggle and timeout in minutes.
+- Timeout is saved on every valid keystroke (`input`), because the popup can close before `change` fires.
+- "Add current site" adds the active tab's hostname to the whitelist; entries can be removed.
 
 ### manifest.json
-Declares required permissions:
-- `tabs`: Access to tab information
-- `storage`: Persist settings and tab activity
-- `alarms`: Periodic background checks
+Permissions: `tabs` (read tab URLs), `storage`, `alarms`.
 
 ## Development
 
@@ -53,6 +50,11 @@ After modifying files:
 3. For background.js changes, the service worker will restart
 4. For popup changes, close and reopen the popup
 
+### Tests and Lint
+- `bun test` runs unit tests.
+- `bun run check` lints and formats with auto-fix (local use).
+- CI runs `bunx biome ci ./src ./test` (fails on issues, never writes) and `bun test`.
+
 ### Debugging
 - Background service worker: chrome://extensions/ → "Inspect views: service worker"
 - Popup: Right-click popup → "Inspect"
@@ -63,4 +65,8 @@ After modifying files:
 ### chrome.storage.local
 - `enabled` (boolean): Whether auto-close is enabled, defaults to true
 - `timeoutMinutes` (number): Minutes of inactivity before closing, defaults to 30
-- `tabActivity` (object): Map of tabId (string) to timestamp (number), persisted every minute
+- `whitelist` (string[]): Lowercase hostnames whose tabs (and subdomains) are never closed
+
+### chrome.storage.session (cleared on browser restart)
+- `activeSince` (number): Timestamp inactivity is counted from (see background.js)
+- `lastCheck` (number): Timestamp of the last alarm check, used to detect sleep
