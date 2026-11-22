@@ -81,10 +81,7 @@ export async function readSettings(storageArea = chrome.storage.local) {
   return normalizeSettings(storedSettings);
 }
 
-export async function writeSettings(
-  value,
-  storageArea = chrome.storage.local,
-) {
+export async function writeSettings(value, storageArea = chrome.storage.local) {
   const patch = sanitizeSettingsPatch(value);
 
   if (Object.keys(patch).length === 0) {

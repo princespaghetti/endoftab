@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   canCloseTabInWindow,
   DEFAULT_TIMEOUT_MINUTES,
+  getActiveSince,
   getHostname,
   isClosableUrl,
   isWhitelisted,
@@ -12,8 +13,8 @@ import {
   normalizeSettings,
   normalizeTimeoutMinutes,
   normalizeWhitelist,
-  sanitizeSettingsPatch,
   readSettings,
+  sanitizeSettingsPatch,
   writeSettings,
 } from "../src/settings.js";
 
@@ -183,6 +184,52 @@ describe("shouldCloseTab", () => {
       lastAccessed: now - 60 * 60 * 1000,
     };
     expect(shouldCloseTab(tab, now, threshold, [])).toBe(false);
+  });
+});
+
+describe("shouldCloseTab with activeSince", () => {
+  const now = Date.now();
+  const threshold = 30 * 60 * 1000;
+  const staleTab = {
+    pinned: false,
+    active: false,
+    audible: false,
+    url: "https://other.com",
+    lastAccessed: now - 24 * 60 * 60 * 1000, // a day ago
+  };
+
+  it("should not close stale tabs shortly after a restart or wake", () => {
+    const activeSince = now - 5 * 60 * 1000;
+    expect(shouldCloseTab(staleTab, now, threshold, [], activeSince)).toBe(
+      false,
+    );
+  });
+
+  it("should close stale tabs once the timeout passes after restart", () => {
+    const activeSince = now - 31 * 60 * 1000;
+    expect(shouldCloseTab(staleTab, now, threshold, [], activeSince)).toBe(
+      true,
+    );
+  });
+});
+
+describe("getActiveSince", () => {
+  const now = 1_000_000_000;
+
+  it("should start counting now when there is no previous check", () => {
+    expect(getActiveSince(undefined, undefined, now)).toBe(now);
+  });
+
+  it("should keep the existing baseline between regular checks", () => {
+    const activeSince = now - 60 * 60 * 1000;
+    expect(getActiveSince(activeSince, now - 60 * 1000, now)).toBe(activeSince);
+  });
+
+  it("should reset after a long gap such as sleep", () => {
+    const activeSince = now - 60 * 60 * 1000;
+    expect(getActiveSince(activeSince, now - 8 * 60 * 60 * 1000, now)).toBe(
+      now,
+    );
   });
 });
 

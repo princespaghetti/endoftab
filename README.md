@@ -5,10 +5,12 @@ A Chromium browser extension that automatically closes inactive tabs after a con
 ## Features
 
 - Auto-close tabs that have been inactive for a specified duration (default: 30 minutes)
-- Protects pinned, active, and audible tabs from being closed
+- Protects pinned, active, and audible tabs, plus browser pages like `chrome://settings`
+- Whitelist sites (including subdomains) whose tabs are never closed
+- Doesn't mass-close tabs after a browser restart or waking from sleep: the timeout starts counting again from then
 - Easy on/off toggle
-- Configurable timeout duration
-- Persists settings and tab activity across browser restarts
+
+Requires Chrome (or another Chromium browser) 121 or later.
 
 ## Installation
 
@@ -24,5 +26,6 @@ A Chromium browser extension that automatically closes inactive tabs after a con
 Click the extension icon to:
 - Enable or disable auto-closing
 - Adjust the inactivity timeout (in minutes)
+- Add the current site to the whitelist, or remove whitelisted sites
 
 Settings are saved automatically.
